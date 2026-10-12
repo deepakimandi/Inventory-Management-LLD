@@ -1,0 +1,223 @@
+classDiagram
+    direction TB
+
+    class InventoryApplication {
+        <<composition root>>
+        +withDefaults(clock, print)$ InventoryApplication
+        +inventory() InventoryService
+        +replenishment() ReplenishmentService
+        +reports() ReportService
+    }
+    class InventoryService {
+        <<facade>>
+        +addProduct(User, Product)
+        +addWarehouse(User, id, name, location) Warehouse
+        +configureStock(User, wh, sku, reorderLevel, maxLevel)
+        +receive(User, wh, sku, units, ref) int
+        +ship(User, wh, sku, units, ref) int
+        +returnStock(User, wh, sku, units, ref) int
+        +writeOff(User, wh, sku, units, reason) int
+        +transfer(User, fromWh, toWh, sku, units, ref)
+        +quantity(wh, sku) int
+        +totalQuantity(sku) int
+        +search(Predicate~Product~) List~Product~
+    }
+    class ReportService {
+        +stockReport(User) InventoryReport
+        +movements(User, sku) List~StockTransaction~
+    }
+    class InventoryReport {
+        <<record>>
+        +lines List~Line~
+        +totalsBySku() Map
+        +lowStock() List~Line~
+    }
+
+    class ProductCatalog {
+        -Map~String, Product~ products
+        +add(Product)
+        +get(sku) Product
+        +search(Predicate~Product~) List~Product~
+    }
+    class ProductFilters {
+        <<utility>>
+        +byCategory(c)$ Predicate
+        +nameContains(text)$ Predicate
+        +priceBetween(min, max)$ Predicate
+        +attributeEquals(k, v)$ Predicate
+    }
+    class WarehouseRegistry {
+        -Map~String, Warehouse~ warehouses
+        +add(Warehouse)
+        +get(id) Warehouse
+        +all() Collection~Warehouse~
+    }
+
+    class Product {
+        -String sku
+        -String name
+        -ProductCategory category
+        -BigDecimal price
+        -Map~String,String~ attributes
+        +builder(sku, name, category)$ Builder
+    }
+    class ProductCategory {
+        <<enum>>
+        ELECTRONICS
+        CLOTHING
+        GROCERY
+        FURNITURE
+        OTHER
+    }
+    class Warehouse {
+        -String id
+        -String name
+        -String location
+        -ConcurrentHashMap~String, StockItem~ items
+        +stockFor(sku) StockItem
+        +require(sku) StockItem
+        +quantityOf(sku) int
+    }
+    class StockItem {
+        -String warehouseId
+        -String sku
+        -ReentrantLock lock
+        -volatile int quantity
+        -volatile int reorderLevel
+        -volatile int maxLevel
+        +add(units) StockChange
+        +remove(units) StockChange
+        +transfer(from, to, units)$ Transfer
+        +configure(reorderLevel, maxLevel)
+        +isLow() boolean
+    }
+    class StockChange {
+        <<record>>
+        +before int
+        +after int
+        +reorderLevel int
+        +crossedIntoLowStock() boolean
+        +ranOut() boolean
+        +restocked() boolean
+    }
+
+    class User {
+        <<record>>
+        +id String
+        +role Role
+        +require(Permission)
+    }
+    class Role {
+        <<enum>>
+        ADMIN
+        MANAGER
+        STAFF
+        AUDITOR
+        +allows(Permission) boolean
+    }
+    class Permission {
+        <<enum>>
+    }
+
+    class AuditLog {
+        <<interface>>
+        +append(StockTransaction)
+        +forSku(sku) List
+    }
+    class InMemoryAuditLog
+    class StockTransaction {
+        <<record>>
+        +type TransactionType
+        +delta int
+        +before int
+        +after int
+        +actorId String
+        +reference String
+    }
+    class TransactionType {
+        <<enum>>
+        RECEIVE
+        SHIP
+        RETURN
+        WRITE_OFF
+        TRANSFER_OUT
+        TRANSFER_IN
+    }
+
+    class StockEventPublisher {
+        -CopyOnWriteArrayList listeners
+        -Executor executor
+        +subscribe(StockEventListener)
+        +publish(StockEvent)
+    }
+    class StockEventListener {
+        <<interface>>
+        +onEvent(StockEvent)
+    }
+    class StockEvent {
+        <<record>>
+        +type StockEventType
+        +warehouseId String
+        +sku String
+        +quantity int
+    }
+    class DashboardAlertListener
+    class ReplenishmentService {
+        -Map~String, PurchaseOrder~ openByItem
+        -Map~ProductCategory, ReplenishmentStrategy~ strategies
+        +onEvent(StockEvent)
+        +replenish(wh, sku) Optional~PurchaseOrder~
+        +receive(User, poId) int
+        +sweep() List~PurchaseOrder~
+    }
+    class ReplenishmentStrategy {
+        <<interface>>
+        +reorderQuantity(StockItem) int
+    }
+    class FixedQuantityStrategy
+    class TopUpToMaxStrategy
+    class PurchaseOrder {
+        <<record>>
+        +id String
+        +warehouseId String
+        +sku String
+        +quantity int
+    }
+
+    InventoryApplication ..> InventoryService : creates
+    InventoryApplication ..> ReplenishmentService : creates
+    InventoryApplication ..> ReportService : creates
+
+    InventoryService --> ProductCatalog
+    InventoryService --> WarehouseRegistry
+    InventoryService --> AuditLog
+    InventoryService --> StockEventPublisher
+    InventoryService ..> User : checks permission
+    ReportService --> WarehouseRegistry
+    ReportService --> AuditLog
+    ReportService ..> InventoryReport : builds
+
+    ProductCatalog o-- Product
+    ProductCatalog ..> ProductFilters : uses
+    Product --> ProductCategory
+    WarehouseRegistry o-- Warehouse
+    Warehouse *-- StockItem : one per SKU
+    StockItem ..> StockChange : returns
+    StockItem ..> Product : by sku
+
+    User --> Role
+    Role --> Permission
+
+    AuditLog <|.. InMemoryAuditLog
+    AuditLog o-- StockTransaction
+    StockTransaction --> TransactionType
+
+    StockEventPublisher o-- StockEventListener
+    StockEventPublisher ..> StockEvent
+    StockEventListener <|.. DashboardAlertListener
+    StockEventListener <|.. ReplenishmentService
+    ReplenishmentService --> ReplenishmentStrategy
+    ReplenishmentStrategy <|.. FixedQuantityStrategy
+    ReplenishmentStrategy <|.. TopUpToMaxStrategy
+    ReplenishmentService o-- PurchaseOrder
+    ReplenishmentService --> InventoryService : receive(PO)

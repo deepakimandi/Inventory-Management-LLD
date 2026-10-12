@@ -1,0 +1,7 @@
+package com.lld.inventory.model;
+
+public enum Permission {
+    MANAGE_CATALOG, MANAGE_WAREHOUSES, CONFIGURE_STOCK,
+    RECEIVE_STOCK, SHIP_STOCK, RETURN_STOCK, TRANSFER_STOCK, WRITE_OFF_STOCK,
+    VIEW_REPORTS
+}

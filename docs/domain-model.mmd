@@ -1,0 +1,42 @@
+classDiagram
+    direction LR
+    class Product {
+        sku
+        name
+        category
+        price
+        attributes
+    }
+    class Warehouse {
+        id
+        name
+        location
+    }
+    class StockItem {
+        quantity
+        reorderLevel
+        maxLevel
+        lock
+    }
+    class StockTransaction {
+        type
+        delta
+        before
+        after
+        actor
+        reference
+    }
+    class User {
+        id
+        role
+    }
+    class PurchaseOrder {
+        sku
+        warehouse
+        quantity
+    }
+    Warehouse "1" *-- "many" StockItem : holds
+    StockItem "many" --> "1" Product : of SKU
+    StockItem "1" --> "many" StockTransaction : every change
+    User "1" --> "many" StockTransaction : performed
+    StockItem "1" --> "0..1" PurchaseOrder : open reorder

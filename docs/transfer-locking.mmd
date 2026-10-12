@@ -1,0 +1,20 @@
+sequenceDiagram
+    autonumber
+    participant T1 as Thread 1: transfer BLR -> HYD
+    participant T2 as Thread 2: transfer HYD -> BLR
+    participant A as StockItem BLR/LAP-001
+    participant B as StockItem HYD/LAP-001
+
+    Note over T1,B: Both threads sort the two items by key ("BLR/..." < "HYD/...") and lock in that order
+    T1->>A: lock()  (first)
+    T2->>A: lock()  (first) -> waits
+    T1->>B: lock()  (second)
+    T1->>T1: check BLR qty, BLR -= n, HYD += n
+    T1->>B: unlock()
+    T1->>A: unlock()
+    A-->>T2: acquired
+    T2->>B: lock()
+    T2->>T2: check HYD qty, HYD -= n, BLR += n
+    T2->>B: unlock()
+    T2->>A: unlock()
+    Note over T1,B: Without ordering: T1 holds BLR waiting for HYD, T2 holds HYD waiting for BLR = deadlock

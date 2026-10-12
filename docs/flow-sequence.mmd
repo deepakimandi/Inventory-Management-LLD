@@ -1,0 +1,35 @@
+sequenceDiagram
+    autonumber
+    actor S as Staff
+    participant IS as InventoryService
+    participant SI as StockItem (BLR/LAP-001)
+    participant AL as AuditLog
+    participant EP as StockEventPublisher
+    participant DA as DashboardAlertListener
+    participant RS as ReplenishmentService
+    participant ST as ReplenishmentStrategy
+
+    S->>IS: ship(staff, BLR, LAP-001, 6, ORD-2)
+    IS->>IS: staff.require(SHIP_STOCK)
+    IS->>SI: remove(6)
+    activate SI
+    Note over SI: lock()<br/>check 15 >= 6<br/>quantity = 9<br/>snapshot StockChange(15 -> 9, level 10)<br/>unlock()
+    SI-->>IS: StockChange
+    deactivate SI
+    IS->>AL: append(SHIP, -6, 15 -> 9, staff, ORD-2)
+    Note over IS: lock already released
+    IS->>EP: publish(LOW_STOCK)  [crossedIntoLowStock = true]
+    EP->>DA: onEvent -> WARNING alert
+    EP->>RS: onEvent(LOW_STOCK)
+    RS->>RS: re-check isLow(), no open PO for BLR/LAP-001
+    RS->>ST: reorderQuantity(item)  [category -> strategy]
+    ST-->>RS: 50
+    RS->>RS: openByItem.putIfAbsent(BLR/LAP-001, PO-1)
+    IS-->>S: 9
+
+    Note over S,ST: later: supplier delivers
+    S->>RS: receive(staff, PO-1)
+    RS->>RS: openById.remove(PO-1)  (a PO is received only once)
+    RS->>IS: receive(staff, BLR, LAP-001, 50, PO-1)
+    IS->>SI: add(50)  (9 -> 59)
+    RS->>RS: openByItem.remove(...), replenish again if still low
